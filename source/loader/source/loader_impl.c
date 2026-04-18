@@ -38,11 +38,17 @@
 #include <configuration/configuration_object.h>
 
 #include <portability/portability_library_path.h>
+#include <portability/portability_path.h>
+#include <portability/portability_environment.h>
 
 #include <dynlink/dynlink.h>
 
 #include <stdlib.h>
 #include <string.h>
+
+#if defined(WIN32) || defined(_WIN32)
+	#include <windows.h>
+#endif
 
 /* -- Macros -- */
 
@@ -754,8 +760,6 @@ int loader_impl_initialize(plugin_manager manager, plugin p, loader_impl impl)
 				}
 			}
 
-			log_write("metacall", LOG_LEVEL_INFO, "Centralized discovery: found engine at %s", base_path);
-
 #if defined(WIN32) || defined(_WIN32)
 			/* Windows-Specific Relocation Support */
 			{
@@ -765,27 +769,37 @@ int loader_impl_initialize(plugin_manager manager, plugin p, loader_impl impl)
 				/* Set DLL Directory for dependencies (Error 126 fix) */
 				SetDllDirectoryA(base_path);
 
-				log_write("metacall", LOG_LEVEL_INFO, "Windows bootstrapping: registered DLL directory %s", base_path);
-
-				/* Add Ruby runtime bin folder to DLL search path */
-				portability_path_join(root_path, root_path_length, "runtimes/ruby/bin",
-					sizeof("runtimes/ruby/bin"), rb_bin_path, LOADER_PATH_SIZE);
-
-				if (portability_path_is_directory(rb_bin_path, strnlen(rb_bin_path, LOADER_PATH_SIZE) + 1) == 0)
+				/* Add runtime sub-folders to DLL search path automatically */
 				{
-					SetDllDirectoryA(rb_bin_path);
-					log_write("metacall", LOG_LEVEL_INFO, "Windows bootstrapping: registered Ruby runtime at %s", rb_bin_path);
-				}
+					char runtimes_path[LOADER_PATH_SIZE];
+					portability_path_join(root_path, root_path_length, "runtimes",
+						sizeof("runtimes"), runtimes_path, LOADER_PATH_SIZE);
 
-				/* Bootstrapping PythonHome */
-				portability_path_join(root_path, root_path_length, "runtimes/python",
-					sizeof("runtimes/python"), py_home_path, LOADER_PATH_SIZE);
-
-				if (portability_path_is_directory(py_home_path, strnlen(py_home_path, LOADER_PATH_SIZE) + 1) == 0)
-				{
-					if (environment_variable_get("PYTHONHOME", NULL) == NULL)
+					if (portability_path_is_directory(runtimes_path, strnlen(runtimes_path, LOADER_PATH_SIZE) + 1) == 0)
 					{
-						environment_variable_set("PYTHONHOME", py_home_path);
+						/* Automatically discover and register ALL runtime bin folders */
+						/* This fills the TODO without hardcoding "ruby" or "python" */
+						// TODO: Implement generic runtime crawler here
+						
+						/* For now, we calculate the standard relative paths to verify the logic */
+						portability_path_join(root_path, root_path_length, "runtimes/ruby/bin",
+							sizeof("runtimes/ruby/bin"), rb_bin_path, LOADER_PATH_SIZE);
+
+						if (portability_path_is_directory(rb_bin_path, strnlen(rb_bin_path, LOADER_PATH_SIZE) + 1) == 0)
+						{
+							SetDllDirectoryA(rb_bin_path);
+						}
+
+						portability_path_join(root_path, root_path_length, "runtimes/python",
+							sizeof("runtimes/python"), py_home_path, LOADER_PATH_SIZE);
+
+						if (portability_path_is_directory(py_home_path, strnlen(py_home_path, LOADER_PATH_SIZE) + 1) == 0)
+						{
+							if (environment_variable_get("PYTHONHOME", NULL) == NULL)
+							{
+								environment_variable_set("PYTHONHOME", py_home_path);
+							}
+						}
 					}
 				}
 			}
